@@ -1,8 +1,11 @@
 package com.sstonn.flutter_wear_os_connectivity
 
+import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import android.util.Pair
 import androidx.annotation.NonNull
+import androidx.wear.remote.interactions.RemoteActivityHelper
 import com.google.android.gms.wearable.*
 import com.google.android.gms.wearable.CapabilityClient.FILTER_ALL
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -14,11 +17,14 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.*
 import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.pathString
+
+private const val TAG = "WearOsConnectivity"
 
 class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private lateinit var channel: MethodChannel
@@ -33,9 +39,14 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
     private lateinit var nodeClient: NodeClient
     private lateinit var dataClient: DataClient
     private lateinit var capabilityClient: CapabilityClient
+    private var remoteActivityHelper: RemoteActivityHelper? = null
 
     //Activity and context references
     private var activityBinding: ActivityPluginBinding? = null
+        set(value) {
+            field = value
+            remoteActivityHelper = null
+        }
 
     //Listeners for capability changed
     private var capabilityListeners: MutableMap<String, CapabilityClient.OnCapabilityChangedListener> =
@@ -71,6 +82,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
             "isSupported" -> {
                 result.success(true)
             }
+
             "configure" -> {
                 // Initialize all clients
                 activityBinding?.let { it ->
@@ -81,6 +93,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                 }
                 result.success(null)
             }
+
             "getConnectedDevices" -> {
                 scope(Dispatchers.IO).launch {
                     try {
@@ -98,6 +111,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     }
                 }
             }
+
             "getCompanionPackageForDevice" -> {
                 val nodeId = call.arguments as String?
                 nodeId?.let {
@@ -117,6 +131,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     }
                 }
             }
+
             "getLocalDeviceInfo" -> {
                 scope(Dispatchers.IO).launch {
                     try {
@@ -134,6 +149,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     }
                 }
             }
+
             "findDeviceIdFromBluetoothAddress" -> {
                 val macAddress: String? = call.arguments as String?
                 macAddress?.let {
@@ -153,6 +169,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                 }
                 result.success(null)
             }
+
             "getAllCapabilities" -> {
                 val filterType = call.arguments as Int
                 scope(Dispatchers.IO).launch {
@@ -174,6 +191,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     }
                 }
             }
+
             "findCapabilityByName" -> {
                 val arguments = call.arguments as Map<*, *>
                 val name = arguments["name"] as String
@@ -196,6 +214,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     }
                 }
             }
+
             "addCapabilityListener" -> {
                 val arguments = call.arguments as Map<*, *>
                 val name = arguments["name"] as String?
@@ -207,6 +226,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     addNewCapabilityListener(result, path, filterType)
                 }
             }
+
             "removeCapabilityListener" -> {
                 val arguments = call.arguments as Map<*, *>
                 val name = arguments["name"] as String?
@@ -215,6 +235,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     removeCapabilityListener(result, (name ?: path)!!)
                 }
             }
+
             "registerNewCapability" -> {
                 val capabilityName: String? =
                     call.arguments as String?
@@ -238,6 +259,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                 }
                 result.success(null)
             }
+
             "removeExistingCapability" -> {
                 val capabilityName: String? =
                     call.arguments as String?
@@ -261,6 +283,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                 }
                 result.success(null)
             }
+
             "sendMessage" -> {
                 val arguments = call.arguments as Map<*, *>
                 val data = arguments["data"] as ByteArray
@@ -285,6 +308,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     }
                 }
             }
+
             "addMessageListener" -> {
                 val arguments = call.arguments as Map<*, *>
                 val name = arguments["name"] as String?
@@ -296,6 +320,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     addNewMessageListener(result, path, filterType)
                 }
             }
+
             "removeMessageListener" -> {
                 val arguments = call.arguments as Map<*, *>
                 val name = arguments["name"] as String?
@@ -306,6 +331,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     result.success(null)
                 }
             }
+
             "findDataItem" -> {
                 val path = call.arguments as String
                 scope(Dispatchers.IO).launch {
@@ -324,6 +350,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     }
                 }
             }
+
             "getAllDataItems" -> {
                 scope(Dispatchers.IO).launch {
                     try {
@@ -337,6 +364,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     }
                 }
             }
+
             "syncData" -> {
                 try {
                     val arguments = call.arguments as HashMap<*, *>
@@ -367,6 +395,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     handleFlutterError(result, "No data found")
                 }
             }
+
             "deleteDataItems" -> {
                 val arguments = call.arguments as HashMap<*, *>
                 val path = arguments["path"] as String
@@ -386,6 +415,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                 }
 
             }
+
             "getDataItems" -> {
                 val arguments = call.arguments as HashMap<*, *>
                 val path = arguments["path"] as String
@@ -405,6 +435,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     }
                 }
             }
+
             "addDataListener" -> {
                 val arguments = call.arguments as Map<*, *>
                 val name = arguments["name"] as String?
@@ -416,6 +447,7 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     addNewDataListener(result, path, filterType)
                 }
             }
+
             "removeDataListener" -> {
                 val arguments = call.arguments as Map<*, *>
                 val name = arguments["name"] as String?
@@ -424,6 +456,42 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                     removeDataListener(result, (name ?: path)!!)
                 }
             }
+
+            "startRemoteActivityUri" -> {
+                val arguments = call.arguments as Map<*, *>
+                val nodeId = arguments["nodeId"] as String?
+                val uri = arguments["uri"] as String?
+                val activity = activityBinding?.activity
+                if (activity == null) {
+                    result.error("InvalidState", "Plugin is not attached to activity", null)
+                    return
+                }
+                val helper = remoteActivityHelper ?: RemoteActivityHelper(activity).also {
+                    remoteActivityHelper = it
+                }
+                scope(Dispatchers.IO).launch {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW)
+                            .addCategory(Intent.CATEGORY_BROWSABLE)
+                            .setData(Uri.parse(uri))
+                        val startRemote = helper.startRemoteActivity(
+                            intent,
+                            nodeId
+                        )
+                        Log.d(TAG, "Launching remote Intent $intent to $nodeId")
+                        startRemote.await()
+                        Log.d(TAG, "Done launching.")
+                        scope(Dispatchers.Main).launch {
+                            result.success(true)
+                        }
+                    } catch (e: Exception) {
+                        handleFlutterError(result, "Error starting remote activity $e")
+                    }
+
+                }
+
+            }
+
             else -> {
                 result.notImplemented()
             }
@@ -815,33 +883,42 @@ class FlutterWearOsConnectivityPlugin : FlutterPlugin, MethodCallHandler, Activi
                 is String -> {
                     dataMap.putString(key.toString(), value)
                 }
+
                 is Boolean -> {
                     dataMap.putBoolean(key.toString(), value)
                 }
+
                 is Int -> {
                     dataMap.putInt(key.toString(), value)
                 }
+
                 is Double -> {
                     dataMap.putDouble(key.toString(), value)
                 }
+
                 is Long -> {
                     dataMap.putLong(key.toString(), value)
                 }
+
                 is ByteArray -> {
                     dataMap.putByteArray(key.toString(), value)
                 }
+
                 is FloatArray -> {
                     dataMap.putFloatArray(key.toString(), value)
                 }
+
                 is LongArray -> {
                     dataMap.putLongArray(key.toString(), value)
                 }
+
                 is HashMap<*, *> -> {
                     dataMap.putDataMap(
                         key.toString(),
                         (value).toDataMap()
                     )
                 }
+
                 is List<*> -> {
                     if ((value).isEmpty()) continue
                     @Suppress("UNCHECKED_CAST")

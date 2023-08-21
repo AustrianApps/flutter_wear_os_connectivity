@@ -304,6 +304,16 @@ class FlutterWearOsConnectivity extends FlutterSmartWatchPlatformInterface {
             : {"path": pathURI.toString()});
   }
 
+  /// Starts an intent with the given [uri] as data.
+  /// When [nodeId] is null, it will be sent to all nodes.
+  /// See https://developer.android.com/training/wearables/apps/standalone-apps#android-phone-to-watch
+  Future<void> startRemoteActivity({required Uri uri, String? nodeId}) async {
+    await channel.invokeMethod('startRemoteActivityUri', {
+      'uri': uri.toString(),
+      'nodeId': nodeId,
+    });
+  }
+
   @override
   void dispose() {
     _wearOSObserver.streamControllers.values.forEach((childControllers) {
